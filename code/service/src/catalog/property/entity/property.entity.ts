@@ -1,6 +1,7 @@
 import { PropertyKind } from '../property-kind.enum';
 import { PropertyModel } from '../property.model';
 import { PropertyOptionEntity } from './property-option.entity';
+import { UnitEntity } from '../../unit/entity/unit.entity';
 
 export class PropertyEntity {
   code: string;
@@ -8,6 +9,7 @@ export class PropertyEntity {
   description: string | null;
   kind: PropertyKind;
   unitCode: string | null;
+  unit: UnitEntity | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +22,7 @@ export class PropertyEntity {
       description: model.description,
       kind: model.kind,
       unitCode: model.unitCode,
+      unit: model.unit ? UnitEntity.fromModel(model.unit) : null,
       version: model.version,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,

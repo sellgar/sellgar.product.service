@@ -274,8 +274,8 @@ export class ProductTypeRepository {
   }
 
   private readonly relations = {
-    productFields: { property: { options: { extras: true } } },
-    variantFields: { property: { options: { extras: true } } },
+    productFields: { property: { unit: true, options: { extras: true } } },
+    variantFields: { property: { unit: true, options: { extras: true } } },
   } as const;
 
   private readonly order = {

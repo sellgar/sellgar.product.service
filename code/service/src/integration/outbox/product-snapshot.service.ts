@@ -58,8 +58,8 @@ export class ProductSnapshotService {
   private readonly relations: FindOptionsRelations<ProductModel> = {
     brand: true,
     productType: {
-      productFields: { property: { options: { extras: true } } },
-      variantFields: { property: { options: { extras: true } } },
+      productFields: { property: { unit: true, options: { extras: true } } },
+      variantFields: { property: { unit: true, options: { extras: true } } },
     },
     properties: { values: true },
     variants: { properties: { values: true }, images: { image: true } },

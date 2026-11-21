@@ -35,7 +35,7 @@ export class PropertyRepository {
 
     const items = await repository.find({
       where: { code: In(page.map((property) => property.code)) },
-      relations: { options: { extras: true } },
+      relations: { unit: true, options: { extras: true } },
       order: {
         code: 'ASC',
         options: { sortOrder: 'ASC', code: 'ASC', extras: { sortOrder: 'ASC', type: 'ASC' } },
@@ -231,7 +231,7 @@ export class PropertyRepository {
   private async readProperty(manager: EntityManager, code: string): Promise<PropertyModel> {
     const property = await manager.findOne(PropertyModel, {
       where: { code },
-      relations: { options: { extras: true } },
+      relations: { unit: true, options: { extras: true } },
       order: { options: { sortOrder: 'ASC', code: 'ASC', extras: { sortOrder: 'ASC', type: 'ASC' } } },
     });
     if (!property) throw new NotFoundException(`Property ${code} not found`);

@@ -124,7 +124,7 @@ export class ProductRepository {
     return this.dataSource.manager.transaction('REPEATABLE READ', async (manager) => {
       const product = await manager.findOne(ProductModel, {
         where: { uuid: productUuid },
-        relations: { productType: { variantFields: { property: { options: { extras: true } } } } },
+        relations: { productType: { variantFields: { property: { unit: true, options: { extras: true } } } } },
         relationLoadStrategy: 'query',
       });
       if (!product) throw new NotFoundException(`Product ${productUuid} not found`);
@@ -493,7 +493,7 @@ export class ProductRepository {
 
     const productProperties = manager.createQueryBuilder(ProductPropertyModel, 'assignment').setFindOptions({
       where: { productUuid: uuid },
-      relations: { values: true, typeField: { property: { options: { extras: true } } } },
+      relations: { values: true, typeField: { property: { unit: true, options: { extras: true } } } },
       relationLoadStrategy: 'query',
     });
     productProperties.andWhere((query) => {
@@ -524,7 +524,7 @@ export class ProductRepository {
 
     const variantProperties = manager.createQueryBuilder(VariantPropertyModel, 'assignment').setFindOptions({
       where: { variantUuid: In(product.variants.map((variant) => variant.uuid)) },
-      relations: { values: true, typeField: { property: { options: { extras: true } } } },
+      relations: { values: true, typeField: { property: { unit: true, options: { extras: true } } } },
       relationLoadStrategy: 'query',
     });
     variantProperties.andWhere((query) => {

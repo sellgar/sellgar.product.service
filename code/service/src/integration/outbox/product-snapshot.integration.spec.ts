@@ -13,6 +13,9 @@ import { TypeProductFieldModel } from '../../catalog/product-type/type-product-f
 import { TypeVariantFieldModel } from '../../catalog/product-type/type-variant-field.model';
 import { PropertyModel } from '../../catalog/property/property.model';
 import { PropertyKind } from '../../catalog/property/property-kind.enum';
+import { UnitModel } from '../../catalog/unit/unit.model';
+import { PropertyRepository } from '../../catalog/property/repository/property.repository';
+import { PropertyEntity } from '../../catalog/property/entity/property.entity';
 import { PropertyOptionModel } from '../../catalog/property/property-option.model';
 import { ProductPropertyModel } from '../../catalog/product/product-property.model';
 import { ProductPropertyValueModel } from '../../catalog/product/product-property-value.model';
@@ -228,6 +231,7 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
     await runner.startTransaction('REPEATABLE READ');
     try {
       const manager = runner.manager;
+      await manager.insert(UnitModel, { code: 'mm', name: 'Миллиметр', symbol: 'мм' });
       const fields = [
         { code: 'empty', kind: PropertyKind.TEXT },
         { code: 'assignment-without-values', kind: PropertyKind.TEXT },
@@ -236,7 +240,11 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
         { code: 'decimal-zero', kind: PropertyKind.DECIMAL },
       ];
       for (const [index, field] of fields.entries()) {
-        await manager.insert(PropertyModel, { ...field, name: field.code });
+        await manager.insert(PropertyModel, {
+          ...field,
+          name: field.code,
+          unitCode: field.code === 'decimal-zero' ? 'mm' : null,
+        });
         const definition = {
           typeUuid,
           propertyCode: field.code,
@@ -293,6 +301,21 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
       expect(queries.length).toBeLessThan(40);
 
       const full = await controller.getByUuid({ uuid: productUuid });
+      for (const result of [full, selected]) {
+        for (const owner of [result, result.variants[0]]) {
+          const field = owner.properties.find((field) => field.propertyCode === 'decimal-zero')!;
+          expect(field.property.unitCode).toBe('mm');
+          expect(field.property.unit).toMatchObject({ code: 'mm', name: 'Миллиметр', symbol: 'мм' });
+        }
+        expect(result.properties.find((field) => field.propertyCode === 'false')!.property.unit).toBeNull();
+      }
+      const properties = new PropertyRepository({ manager } as DataSource, {} as ProductOutboxService);
+      expect(PropertyEntity.fromModel(await properties.getByCode('decimal-zero')).unit?.symbol).toBe('мм');
+      const variants = await repository.getVariants(productUuid, variantUuids[0]);
+      expect(
+        variants.product.productType.variantFields.find((field) => field.propertyCode === 'decimal-zero')!.property.unit
+          ?.symbol,
+      ).toBe('мм');
       expect(await controller.getByUuid({ uuid: productUuid, withEmptyProperties: true })).toEqual(full);
       expect(codes(full)).toContain('empty');
       expect(codes(full)).toContain('assignment-without-values');
