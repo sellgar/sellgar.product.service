@@ -33,23 +33,23 @@
   ConfigMap `.env` принадлежат этому репозиторию; общий chart — infrastructure.
 - Внутренний HTTP `GET /health` на `PORT` (default 8080) проверяет PostgreSQL и
   оба RMQ consumer: commands/events. Наружу сервис не публикуется.
-- CI выполняет build образов на Node 24 → publish → параллельные test/migrate
-  → deploy. Test запускает существующие Jest-тесты с временным PostgreSQL 16;
-  migrate работает с БД выбранной среды. Deploy зависит от обеих jobs.
-- На PR без публикации выполняется build → tests; release/* запускает tests
-  после publish. Prod принимает только кандидата с успешным CI целиком.
+- CI выполняет unit → build образов на Node 24 → publish → migrate → deploy.
+  Unit проверяет исходники без Nest build и PostgreSQL; migration работает с БД выбранной среды.
+  Ошибка unit блокирует сборку, ошибка migrate блокирует deploy. Компонентной job нет.
+- На PR без публикации выполняется unit → build; release/* — unit → build → publish.
+  Prod принимает только кандидата с успешным CI целиком.
 - Dev запускается только через `ci.yml`; PR/release — через `checks.yml`.
   Не добавлять jobs других сценариев в dev workflow с условием skip.
 - Runtime содержит только production dependencies, compiled service и outbox;
-  PostgreSQL присутствует только в проверочном этапе сборки.
+  PostgreSQL не входит в Dockerfile приложения и юнит-тестов.
 - Docker targets `application` и `migration` используют общую проверенную сборку.
   Первый не содержит migrations/CLI DataSource; второй выполняет TypeORM CLI без
   старта Nest. Docker target tests запускается отдельно от сборки образов.
   GitHub Release хранит release.json
   с обоими digest, source SHA и chart SHA. Prod принимает тег кандидата и
   продвигает ту же пару без сборки.
-- Сборка/публикация вызывают `build-service.yml` infrastructure; доставка —
-  `deliver-service.yml`: параллельные test/migrate → deploy.
+- Юниты вызывают `test-application.yml`, сборка/публикация — `build-service.yml`;
+  доставка — `deliver-service.yml`: migrate → deploy.
   Команды Kubernetes/Helm находятся прямо в jobs; delivery Python/scripts и
   сгенерированные per-release Helm-пакеты Product не использует.
 - Application `.env` — отдельный immutable ConfigMap версии выпуска. Миграция
