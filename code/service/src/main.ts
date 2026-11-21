@@ -16,8 +16,8 @@ async function bootstrap(): Promise<void> {
   try {
     const env = process.env;
     const url = requiredEnvironment(env, 'PRODUCT_AMQP_URL');
-    const commandQueue = requiredEnvironment(env, 'PRODUCT_V2_COMMAND_QUEUE');
-    const eventQueue = requiredEnvironment(env, 'PRODUCT_V2_EVENT_QUEUE');
+    const commandQueue = requiredEnvironment(env, 'PRODUCT_COMMAND_QUEUE');
+    const eventQueue = requiredEnvironment(env, 'PRODUCT_EVENT_QUEUE');
     if (commandQueue === eventQueue) throw new Error('Command and event queues must be different');
 
     const commands = app.connectMicroservice<MicroserviceOptions>(
@@ -60,7 +60,7 @@ async function bootstrap(): Promise<void> {
     await app.init();
     await app.startAllMicroservices();
     await app.listen(port);
-    Logger.log('Product service v2 started', 'Bootstrap');
+    Logger.log('Product service started', 'Bootstrap');
   } catch (error) {
     await app.close();
     throw error;

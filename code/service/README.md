@@ -49,7 +49,7 @@ optimistic version check.
 
 ## Конфигурация
 
-Рабочий локальный файл `code/service/.env` создан для базы `product_srv_v2` и
+Рабочий локальный файл `code/service/.env` создан для базы `product_srv` и
 игнорируется Git. Образец без секретов находится в `.env.example`.
 
 ```sh
@@ -57,10 +57,10 @@ PRODUCT_DATABASE_HOST=127.0.0.1
 PRODUCT_DATABASE_PORT=5432
 PRODUCT_DATABASE_USERNAME=admin
 PRODUCT_DATABASE_PASSWORD=change-me
-PRODUCT_DATABASE_NAME=product_srv_v2
+PRODUCT_DATABASE_NAME=product_srv
 PRODUCT_AMQP_URL=amqp://localhost:5672
-PRODUCT_V2_COMMAND_QUEUE=product.v2.commands
-PRODUCT_V2_EVENT_QUEUE=product.v2.events
+PRODUCT_COMMAND_QUEUE=product.commands
+PRODUCT_EVENT_QUEUE=product.events
 PRODUCT_EVENTS_EXCHANGE=event.exchange
 ```
 
@@ -84,7 +84,7 @@ yarn start:dev
 yarn build:product_srv
 ```
 
-На `product_srv_v2` применены пять миграций. Реальный smoke-сценарий проверен
+На `product_srv` применены пять миграций. Реальный smoke-сценарий проверен
 через TypeORM: создание справочников, типа, товара и варианта одной транзакцией;
 появление нового пустого поля; каскад значений после удаления поля; поиск по
 числовому диапазону и опции варианта; архивирование; блокировка физического

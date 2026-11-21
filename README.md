@@ -59,7 +59,7 @@ smoke-цепочка удалена; под другим именем она н�
 предыдущие версии сохраняются для ещё работающих pod. У migration Job собственный
 ConfigMap. Credentials поступают через Secret refs, а не через GitHub build jobs.
 Secret names: `product-database`, `rabbitmq-default-user`, registry `ghcr-pull`.
-Database/user: `product_srv_v2`. В prod эти ресурсы создаются отдельно в sellgar-prod;
+Database/user: `product_srv`. В prod эти ресурсы создаются отдельно в sellgar-prod;
 наличие prod values не означает, что production уже развёрнут.
 
 Миграция получает только DB secret refs, backoffLimit 0 и deadline 600 секунд.

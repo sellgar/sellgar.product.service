@@ -33,7 +33,7 @@ export const PRODUCT_EVENT_CLIENT = 'PRODUCT_EVENT_CLIENT';
       }],
     }),
     OutboxModule.forRoot({
-      producer: 'product_srv_v2',
+      producer: 'product_srv',
       eventClientToken: PRODUCT_EVENT_CLIENT,
     }),
   ],
