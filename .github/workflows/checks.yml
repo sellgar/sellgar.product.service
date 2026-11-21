@@ -15,13 +15,15 @@ concurrency:
 
 jobs:
   images:
-    uses: pyatakovvg/sellgar.infrastructure/.github/workflows/build-service.yml@delivery-v0.5.2
+    uses: sellgar/sellgar.infrastructure/.github/workflows/build-service.yml@delivery-v0.6.0
     permissions:
       contents: write
       packages: write
     secrets:
       SUBMODULES_READ_TOKEN: ${{ secrets.SUBMODULES_READ_TOKEN }}
     with:
+      release-name: product-service
+      migrations: true
       publish: ${{ github.event_name == 'push' }}
 
   tests:
