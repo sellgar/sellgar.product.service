@@ -288,7 +288,10 @@ export class ProductRepository {
 
   changeProductStatus(uuid: string, version: number, status: ProductStatus): Promise<ProductModel> {
     return this.dataSource.transaction(async (manager) => {
-      const product = await this.lockProduct(manager, uuid, version);
+      const product = await this.lockProduct(manager, uuid);
+      // A retry after a Store timeout must finish the cascade without changing the catalog again.
+      if (status === ProductStatus.ARCHIVED && product.status === status) return this.read(manager, uuid);
+      if (product.version !== version) throw new ConflictException(`Product ${uuid} was changed by another request`);
       if (product.status === status) return this.read(manager, uuid);
       product.status = status;
       await this.bumpProduct(manager, product);
@@ -303,8 +306,11 @@ export class ProductRepository {
     status: ProductStatus,
   ): Promise<ProductModel> {
     return this.dataSource.transaction(async (manager) => {
-      const product = await this.lockProduct(manager, productUuid, version);
+      const product = await this.lockProduct(manager, productUuid);
       const variant = await this.lockVariant(manager, variantUuid, product.uuid);
+      if (status === ProductStatus.ARCHIVED && variant.status === status) return this.read(manager, product.uuid);
+      if (product.version !== version)
+        throw new ConflictException(`Product ${productUuid} was changed by another request`);
       if (variant.status === status) return this.read(manager, product.uuid);
       variant.status = status;
       await manager.save(VariantModel, variant);
@@ -473,10 +479,11 @@ export class ProductRepository {
     }
   }
 
-  private async lockProduct(manager: EntityManager, uuid: string, version: number): Promise<ProductModel> {
+  private async lockProduct(manager: EntityManager, uuid: string, version?: number): Promise<ProductModel> {
     const product = await manager.findOne(ProductModel, { where: { uuid }, lock: { mode: 'pessimistic_write' } });
     if (!product) throw new NotFoundException(`Product ${uuid} not found`);
-    if (product.version !== version) throw new ConflictException(`Product ${uuid} was changed by another request`);
+    if (version !== undefined && product.version !== version)
+      throw new ConflictException(`Product ${uuid} was changed by another request`);
     return product;
   }
 

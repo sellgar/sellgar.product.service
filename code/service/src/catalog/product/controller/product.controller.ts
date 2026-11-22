@@ -13,6 +13,7 @@ import { ProductUuidDto } from './dto/product-uuid.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ProductCommandMapper } from './mapper/product-command.mapper';
+import { ArchiveImpactDto } from './dto/archive-impact.dto';
 
 @Controller()
 export class ProductController {
@@ -60,6 +61,11 @@ export class ProductController {
   @MessagePattern({ cmd: 'catalog.v2.product.archive' })
   archive(@Payload() dto: ChangeProductStatusDto) {
     return this.service.archive(dto.uuid, dto.version);
+  }
+
+  @MessagePattern({ cmd: 'catalog.v2.product.archiveImpact' })
+  archiveImpact(@Payload() dto: ArchiveImpactDto) {
+    return this.service.archiveImpact(dto.uuid, dto.variantUuid);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.product.restore' })

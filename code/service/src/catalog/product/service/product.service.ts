@@ -18,6 +18,7 @@ import { VariantInputCommand } from './command/variant-input.command';
 import { PropertyAssignmentService } from './property-assignment.service';
 import { ProductFilterService } from './product-filter.service';
 import { ProductPropertyFilterCommand } from './command/product-property-filter.command';
+import { StoreCatalogGateway } from '../../../integration/store/store-catalog.gateway';
 
 @Injectable()
 export class ProductService {
@@ -26,6 +27,7 @@ export class ProductService {
     private readonly productTypeRepository: ProductTypeRepository,
     private readonly assignmentService: PropertyAssignmentService,
     private readonly filterService: ProductFilterService,
+    private readonly store: StoreCatalogGateway,
   ) {}
 
   async getAll(
@@ -147,7 +149,15 @@ export class ProductService {
   }
 
   async archive(uuid: string, version: number): Promise<ProductEntity> {
-    return ProductEntity.fromModel(await this.repository.changeProductStatus(uuid, version, ProductStatus.ARCHIVED));
+    const product = ProductEntity.fromModel(
+      await this.repository.changeProductStatus(uuid, version, ProductStatus.ARCHIVED),
+    );
+    await this.store.synchronize(product);
+    return product;
+  }
+
+  archiveImpact(uuid: string, variantUuid?: string) {
+    return this.store.archiveImpact(uuid, variantUuid);
   }
 
   async restore(uuid: string, version: number): Promise<ProductEntity> {
@@ -155,9 +165,11 @@ export class ProductService {
   }
 
   async archiveVariant(productUuid: string, variantUuid: string, version: number): Promise<ProductEntity> {
-    return ProductEntity.fromModel(
+    const product = ProductEntity.fromModel(
       await this.repository.changeVariantStatus(productUuid, variantUuid, version, ProductStatus.ARCHIVED),
     );
+    await this.store.synchronize(product);
+    return product;
   }
 
   async restoreVariant(productUuid: string, variantUuid: string, version: number): Promise<ProductEntity> {

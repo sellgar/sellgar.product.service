@@ -21,9 +21,11 @@ import { VariantImageModel } from './variant-image.model';
 import { VariantPropertyValueModel } from './variant-property-value.model';
 import { VariantPropertyModel } from './variant-property.model';
 import { VariantModel } from './variant.model';
+import { StoreCatalogModule } from '../../integration/store/store-catalog.module';
 
 @Module({
   imports: [
+    StoreCatalogModule,
     ProductTypeModule,
     PropertyModule,
     TypeOrmModule.forFeature([

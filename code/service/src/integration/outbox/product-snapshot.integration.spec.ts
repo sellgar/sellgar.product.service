@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { StoreCatalogGateway } from '../store/store-catalog.gateway';
 
 import { CursorPagination } from '@sellgar/pagination';
 import { randomUUID } from 'node:crypto';
@@ -285,6 +286,7 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
         {} as ProductTypeRepository,
         {} as PropertyAssignmentService,
         {} as ProductFilterService,
+        { synchronize: jest.fn().mockResolvedValue({}) } as unknown as StoreCatalogGateway,
       );
       const controller = new ProductController(service, {} as ProductCommandMapper);
       queries.length = 0;
@@ -450,6 +452,7 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
         {} as ProductTypeRepository,
         {} as PropertyAssignmentService,
         {} as ProductFilterService,
+        { synchronize: jest.fn().mockResolvedValue({}) } as unknown as StoreCatalogGateway,
       );
       const updated = await service.update({ uuid: productUuid, version: 1, typeVersion: 1, name: 'Edited archive' });
       expect(updated.status).toBe(ProductStatus.ARCHIVED);
@@ -463,6 +466,15 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
       );
       expect((await service.getByUuid(productUuid)).variants).toHaveLength(variantUuids.length - 1);
       expect(add.mock.calls.every(([, event]) => event.payload.variants.length === variantUuids.length)).toBe(true);
+      const archived = await service.archive(productUuid, restored.version);
+      const emitted = add.mock.calls.length;
+      expect((await service.archive(productUuid, restored.version)).version).toBe(archived.version);
+      expect(add).toHaveBeenCalledTimes(emitted);
+      const variantArchived = await service.archiveVariant(productUuid, variantUuids[1], archived.version);
+      expect((await service.archiveVariant(productUuid, variantUuids[1], archived.version)).version).toBe(
+        variantArchived.version,
+      );
+      expect(add).toHaveBeenCalledTimes(emitted + 1);
     } finally {
       await runner.rollbackTransaction();
       await runner.release();

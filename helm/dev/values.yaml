@@ -6,5 +6,6 @@ environmentFile:
     PRODUCT_DATABASE_PORT=5432
     PRODUCT_DATABASE_NAME=product_srv
     PRODUCT_COMMAND_QUEUE=product.commands
+    AMQP_STORE_SRV_COMMAND_QUEUE=store_srv.command.queue
     PRODUCT_EVENT_QUEUE=product.events
     PRODUCT_EVENTS_EXCHANGE=event.exchange
