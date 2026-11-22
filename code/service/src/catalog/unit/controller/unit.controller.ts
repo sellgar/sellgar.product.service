@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { GetAllUnitsDto } from './dto/get-all-units.dto';
 import { UnitCodeDto } from './dto/unit-code.dto';
@@ -12,7 +13,7 @@ export class UnitController {
 
   @MessagePattern({ cmd: 'catalog.v2.unit.getAll' })
   getAll(@Payload() dto: GetAllUnitsDto) {
-    return this.service.getAll(dto.limit, dto.offset);
+    return this.service.getAll(dto.limit, dto.nextToken);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.unit.getByCode' })

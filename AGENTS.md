@@ -75,3 +75,5 @@ admin UI -> admin gateway -> product_srv -> outbox_event -> RabbitMQ -> store_sr
 Минимальный ручной сценарий: открыть карточку товара в admin UI, добавить
 вариант, сохранить, затем проверить `product_srv.outbox_event`,
 `store_srv.inbox_event` и `store_srv.variant_snapshot`.
+
+- Самостоятельные списки используют @sellgar/pagination: limit/nextToken, ответ items/meta, без totalRows и COUNT всей выборки. HMAC-ключ приходит только из Secret. Подробности — README. Вложенные коллекции и снимки не пагинировать.

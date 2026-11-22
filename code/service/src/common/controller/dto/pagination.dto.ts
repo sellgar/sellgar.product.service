@@ -1,16 +1,3 @@
-import { Type } from 'class-transformer';
-import { IsInt, Max, Min } from 'class-validator';
+import { CursorQueryDto } from '@sellgar/pagination';
 
-export class PaginationDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit = 50;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  offset = 0;
-}
+export class PaginationDto extends CursorQueryDto {}

@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+
+import { CursorPagination } from '@sellgar/pagination';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { OutboxWriter } from '@sellgar/outbox';
@@ -274,6 +276,7 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
         { manager, transaction: (_isolation, callback) => callback(manager) } as DataSource,
         {} as ProductOutboxService,
         snapshots,
+        new CursorPagination('test-pagination-key-at-least-32-bytes'),
       );
       const service = new ProductService(
         repository,
@@ -309,7 +312,11 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
         }
         expect(result.properties.find((field) => field.propertyCode === 'false')!.property.unit).toBeNull();
       }
-      const properties = new PropertyRepository({ manager } as DataSource, {} as ProductOutboxService);
+      const properties = new PropertyRepository(
+        { manager } as DataSource,
+        {} as ProductOutboxService,
+        new CursorPagination('test-pagination-key-at-least-32-bytes'),
+      );
       expect(PropertyEntity.fromModel(await properties.getByCode('decimal-zero')).unit?.symbol).toBe('мм');
       const variants = await repository.getVariants(productUuid, variantUuids[0]);
       expect(
@@ -337,7 +344,12 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
   });
 
   it('reads only the selected variant and rejects a variant belonging to another product', async () => {
-    const repository = new ProductRepository(database, {} as ProductOutboxService, snapshots);
+    const repository = new ProductRepository(
+      database,
+      {} as ProductOutboxService,
+      snapshots,
+      new CursorPagination('test-pagination-key-at-least-32-bytes'),
+    );
     const result = await repository.getVariants(productUuid, variantUuids[0]);
     expect(result.variants.map((variant) => variant.uuid)).toEqual([variantUuids[0]]);
     expect(result.product.productType.variantFields).toHaveLength(1);

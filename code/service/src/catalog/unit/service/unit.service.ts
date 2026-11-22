@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
+
 import { UnitRepository } from '../repository/unit.repository';
 
 @Injectable()
 export class UnitService {
   constructor(private readonly repository: UnitRepository) {}
 
-  getAll(limit: number, offset: number) {
-    return this.repository.getAll(limit, offset);
+  getAll(limit: number, nextToken?: string) {
+    return this.repository.getAll(limit, nextToken);
   }
   getByCode(code: string) {
     return this.repository.getByCode(code);

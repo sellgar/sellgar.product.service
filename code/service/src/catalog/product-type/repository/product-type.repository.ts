@@ -1,3 +1,4 @@
+import { CursorPagination, CursorPage } from '@sellgar/pagination';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
@@ -23,20 +24,25 @@ export class ProductTypeRepository {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly productOutbox: ProductOutboxService,
+    private readonly pagination: CursorPagination,
   ) {}
 
-  async getAll(
-    limit: number,
-    offset: number,
-  ): Promise<{ items: ProductTypeModel[]; total: number; limit: number; offset: number }> {
-    const [items, total] = await this.dataSource.getRepository(ProductTypeModel).findAndCount({
-      relations: this.relations,
-      order: this.order,
-      take: limit,
-      skip: offset,
-    });
-    await this.assignProductCounts(this.dataSource.manager, items);
-    return { items, total, limit, offset };
+  async getAll(limit: number, nextToken?: string): Promise<CursorPage<ProductTypeModel>> {
+    const query = this.dataSource
+      .getRepository(ProductTypeModel)
+      .createQueryBuilder('productType')
+      .setFindOptions({ relations: this.relations, order: this.order });
+    const page = await this.pagination.read(
+      query,
+      { limit, nextToken },
+      {
+        scope: 'product.product-type.list',
+        filters: {},
+        order: [{ expression: 'productType.uuid', direction: 'ASC', type: 'uuid' }],
+      },
+    );
+    await this.assignProductCounts(this.dataSource.manager, page.items);
+    return page;
   }
 
   getByUuid(uuid: string): Promise<ProductTypeModel> {

@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+
+import { CursorPagination } from '@sellgar/pagination';
 import { DataSource } from 'typeorm';
 
 import { ProductOutboxService } from '../../../integration/outbox/product-outbox.service';
@@ -55,7 +57,11 @@ describe('PropertyRepository option updates', () => {
       transaction: jest.fn(async (work: (entityManager: typeof manager) => Promise<PropertyModel>) => work(manager)),
     } as unknown as DataSource;
     const outbox = { touchByProperty: jest.fn() } as unknown as ProductOutboxService;
-    const repository = new PropertyRepository(dataSource, outbox);
+    const repository = new PropertyRepository(
+      dataSource,
+      outbox,
+      new CursorPagination('test-pagination-key-at-least-32-bytes'),
+    );
     const command = Object.assign(new UpdatePropertyOptionCommand(), {
       code: 'color',
       optionCode: 'blue',

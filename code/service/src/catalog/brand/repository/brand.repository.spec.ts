@@ -1,6 +1,9 @@
 import 'reflect-metadata';
+
+import { CursorPagination } from '@sellgar/pagination';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
+
 import { ImageModel } from '../../image/infrastructure/persistence/model/image.model';
 import { BrandImageOutboxService } from '../service/brand-image-outbox.service';
 import { BrandImageModel } from '../brand-image.model';
@@ -9,7 +12,7 @@ import { BrandRepository } from './brand.repository';
 
 describe('Brand updates and explicit image replacement', () => {
   const manager = { findOne: jest.fn(), save: jest.fn(), find: jest.fn(), delete: jest.fn(), insert: jest.fn() };
-  const pageRepository = { findAndCount: jest.fn() };
+  const pageRepository = { createQueryBuilder: jest.fn().mockReturnValue({}) };
   const dataSource = {
     transaction: jest.fn(async (work: (value: unknown) => unknown) => work(manager)),
     getRepository: jest.fn(() => pageRepository),
@@ -19,6 +22,7 @@ describe('Brand updates and explicit image replacement', () => {
   const repository = new BrandRepository(
     dataSource as unknown as DataSource,
     imageOutbox as unknown as BrandImageOutboxService,
+    new CursorPagination('test-pagination-key-at-least-32-bytes'),
   );
   const imageUuid = '1a8e6d33-6000-4000-8000-000000000001';
 
@@ -148,17 +152,19 @@ describe('Brand updates and explicit image replacement', () => {
   it('paginates brands before loading their multiple images', async () => {
     const brand = existingBrand();
     const secondBrand = { ...existingBrand(), code: 'brand-b' };
-    pageRepository.findAndCount.mockResolvedValue([[brand, secondBrand], 8]);
+    jest
+      .spyOn(CursorPagination.prototype, 'read')
+      .mockResolvedValueOnce({ items: [brand, secondBrand], meta: { limit: 2, nextToken: 'next' } });
     manager.find.mockResolvedValue([
       { brandCode: 'brand', imageUuid, sortOrder: 0 },
       { brandCode: 'brand', imageUuid: '1a8e6d33-6000-4000-8000-000000000002', sortOrder: 1 },
     ]);
 
-    const result = await repository.getAll(2, 3);
-    expect(result).toMatchObject({ total: 8, limit: 2, offset: 3 });
+    const result = await repository.getAll(2);
+    expect(result.meta).toEqual({ limit: 2, nextToken: 'next' });
     expect(result.items).toHaveLength(2);
     expect(result.items[0].images).toHaveLength(2);
     expect(result.items[1].images).toEqual([]);
-    expect(pageRepository.findAndCount).toHaveBeenCalledWith({ order: { code: 'ASC' }, take: 2, skip: 3 });
+    jest.restoreAllMocks();
   });
 });

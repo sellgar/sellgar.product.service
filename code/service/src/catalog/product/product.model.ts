@@ -23,6 +23,7 @@ import { VariantModel } from './variant.model';
 @Index('product_type_idx', ['typeUuid'])
 @Index('product_brand_idx', ['brandCode'])
 @Index('product_search_vector_idx', { synchronize: false })
+@Index('product_type_cursor_idx', { synchronize: false })
 export class ProductModel {
   @PrimaryColumn({ type: 'uuid' })
   uuid: string;

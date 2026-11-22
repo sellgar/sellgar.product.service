@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+
+import { CursorPagination } from '@sellgar/pagination';
 import { randomUUID } from 'node:crypto';
 import { DataSource, QueryRunner } from 'typeorm';
 
@@ -34,6 +36,13 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     const schema = `property_page_test_${randomUUID().replaceAll('-', '')}`;
     await runner.query(`CREATE SCHEMA "${schema}"`);
     await runner.query(`SET LOCAL search_path TO "${schema}"`);
+    await runner.query(`CREATE TABLE unit (
+      code varchar(256) PRIMARY KEY, name varchar(256), symbol varchar(256), description text,
+      version integer DEFAULT 1, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+    )`);
+    await runner.query(`CREATE TABLE image (
+      uuid uuid PRIMARY KEY, file_name text, version integer DEFAULT 1
+    )`);
     await runner.query(`CREATE TABLE property (
       code varchar(256) PRIMARY KEY, name varchar(256), description text, kind text,
       unit_code varchar(256), version integer DEFAULT 1,
@@ -57,6 +66,7 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     repository = new PropertyRepository(
       { getRepository: (entity) => runner.manager.getRepository(entity) } as DataSource,
       {} as ProductOutboxService,
+      new CursorPagination('test-pagination-key-at-least-32-bytes'),
     );
   });
 
@@ -68,11 +78,12 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
   });
 
-  it('counts properties rather than joined options when applying limit and offset', async () => {
-    const first = await repository.getAll(50, 0);
-    const second = await repository.getAll(50, 50);
+  it('pages properties without truncating joined options', async () => {
+    const first = await repository.getAll(50);
+    const second = await repository.getAll(50, first.meta.nextToken!);
 
-    expect(first.total).toBe(59);
+    expect(first.meta.nextToken).toEqual(expect.any(String));
+    expect(second.meta.nextToken).toBeNull();
     expect(first.items).toHaveLength(50);
     expect(first.items[1].options.map((option) => option.code)).toEqual(
       Array.from({ length: 6 }, (_, index) => `option-${index}`),

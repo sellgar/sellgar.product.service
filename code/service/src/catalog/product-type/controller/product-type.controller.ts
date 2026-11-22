@@ -17,7 +17,7 @@ export class ProductTypeController {
 
   @MessagePattern({ cmd: 'catalog.v2.productType.getAll' })
   getAll(@Payload() dto: GetAllProductTypesDto) {
-    return this.service.getAll(dto.limit, dto.offset);
+    return this.service.getAll(dto.limit, dto.nextToken);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.productType.getByUuid' })

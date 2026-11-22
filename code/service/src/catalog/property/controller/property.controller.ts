@@ -19,7 +19,7 @@ export class PropertyController {
 
   @MessagePattern({ cmd: 'catalog.v2.property.getAll' })
   getAll(@Payload() dto: GetAllPropertiesDto) {
-    return this.propertyService.getAll(dto.limit, dto.offset);
+    return this.propertyService.getAll(dto.limit, dto.nextToken);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.property.getByCode' })

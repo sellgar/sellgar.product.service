@@ -1,6 +1,8 @@
+import { CursorPagination } from '@sellgar/pagination';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, QueryFailedError } from 'typeorm';
+
 import { ImageModel } from '../../image/infrastructure/persistence/model/image.model';
 import { BrandImageModel } from '../brand-image.model';
 import { BrandModel } from '../brand.model';
@@ -12,14 +14,20 @@ export class BrandRepository {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly imageOutbox: BrandImageOutboxService,
+    private readonly pagination: CursorPagination,
   ) {}
 
-  async getAll(limit: number, offset: number) {
-    const [items, total] = await this.dataSource.getRepository(BrandModel).findAndCount({
-      order: { code: 'ASC' },
-      take: limit,
-      skip: offset,
-    });
+  async getAll(limit: number, nextToken?: string) {
+    const page = await this.pagination.read(
+      this.dataSource.getRepository(BrandModel).createQueryBuilder('brand'),
+      { limit, nextToken },
+      {
+        scope: 'product.brand.list',
+        filters: {},
+        order: [{ expression: 'brand.code', direction: 'ASC', type: 'text' }],
+      },
+    );
+    const items = page.items;
     if (items.length > 0) {
       const links = await this.dataSource.manager.find(BrandImageModel, {
         where: { brandCode: In(items.map((brand) => brand.code)) },
@@ -34,7 +42,7 @@ export class BrandRepository {
       }
       for (const brand of items) brand.images = imagesByBrand.get(brand.code) ?? [];
     }
-    return { items, total, limit, offset };
+    return page;
   }
 
   getByCode(code: string) {

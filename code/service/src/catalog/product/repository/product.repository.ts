@@ -1,3 +1,4 @@
+import { CursorPagination, CursorPage, CursorOrder } from '@sellgar/pagination';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
@@ -31,16 +32,17 @@ export class ProductRepository {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly outbox: ProductOutboxService,
     private readonly snapshots: ProductSnapshotService,
+    private readonly pagination: CursorPagination,
   ) {}
 
   async getAll(
     limit: number,
-    offset: number,
+    nextToken?: string,
     status?: ProductStatus,
     typeUuid?: string,
     filters: ProductPropertyFilterCommand[] = [],
     term?: string,
-  ): Promise<{ items: ProductModel[]; total: number; limit: number; offset: number }> {
+  ): Promise<CursorPage<ProductModel>> {
     const query = this.dataSource.getRepository(ProductModel).createQueryBuilder('product');
     if (term) {
       query.andWhere('product.search_vector @@ product_search_query(:term)', { term });
@@ -52,13 +54,30 @@ export class ProductRepository {
     if (status !== undefined) query.andWhere('product.status = :status', { status });
     if (typeUuid !== undefined) query.andWhere('product.type_uuid = :typeUuid', { typeUuid });
     filters.forEach((filter, index) => this.applyFilter(query, filter, index));
-    const [headers, total] = await query.take(limit).skip(offset).getManyAndCount();
-    if (headers.length === 0) return { items: [], total, limit, offset };
+    const order: CursorOrder[] = [];
+    if (term)
+      order.push({
+        expression: 'ts_rank_cd(product.search_vector, product_search_query(:term), 32)',
+        direction: 'DESC',
+        type: 'real',
+      });
+    order.push({ expression: 'product.uuid', direction: 'ASC', type: 'uuid' });
+    const page = await this.pagination.read(
+      query,
+      { limit, nextToken },
+      {
+        scope: 'product.product.list',
+        filters: { status, typeUuid, filters, term },
+        order,
+      },
+    );
+    if (page.items.length === 0) return page;
     const items = await this.snapshots.getMany(
       this.dataSource.manager,
-      headers.map((product) => product.uuid),
+      page.items.map((product) => product.uuid),
     );
-    return { items, total, limit, offset };
+    const byUuid = new Map(items.map((product) => [product.uuid, product]));
+    return { items: page.items.map((product) => byUuid.get(product.uuid)!), meta: page.meta };
   }
 
   private applyFilter(
@@ -558,7 +577,7 @@ export class ProductRepository {
   private mapWriteError(error: unknown, uuid: string): unknown {
     if (!(error instanceof QueryFailedError)) return error;
     const databaseCode = (error.driverError as { code?: string }).code;
-    if (databaseCode === '23505') return new ConflictException(`Product ${uuid} contains duplicate related data`);
+    if (databaseCode === '23505') return new ConflictException(`Product ${uuid} contains duplicate related items`);
     if (databaseCode === '23503')
       return new BadRequestException(`Product ${uuid} references an unknown type, brand, field, option, or image`);
     if (databaseCode === '23514' || databaseCode === '22003')

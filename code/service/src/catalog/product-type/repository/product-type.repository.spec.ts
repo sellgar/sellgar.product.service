@@ -1,3 +1,4 @@
+import { CursorPagination } from '@sellgar/pagination';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { DataSource } from 'typeorm';
@@ -18,7 +19,7 @@ describe('ProductTypeRepository aggregate update constraints', () => {
     save: jest.fn(),
     getRepository: jest.fn(),
   };
-  const productTypeStore = { findAndCount: jest.fn() };
+  const productTypeStore = { createQueryBuilder: () => ({ setFindOptions: () => ({}) }) };
   const countQuery = {
     select: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
@@ -32,10 +33,15 @@ describe('ProductTypeRepository aggregate update constraints', () => {
     manager,
   };
   const productOutbox = { touchByType: jest.fn().mockResolvedValue([]) };
-  const repository = new ProductTypeRepository(dataSource as unknown as DataSource, productOutbox as never);
+  const repository = new ProductTypeRepository(
+    dataSource as unknown as DataSource,
+    productOutbox as never,
+    new CursorPagination('test-pagination-key-at-least-32-bytes'),
+  );
   const uuid = '11111111-1111-4111-8111-111111111111';
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     productOutbox.touchByType.mockResolvedValue([]);
     manager.getRepository.mockReturnValue({ createQueryBuilder: () => countQuery });
@@ -47,18 +53,18 @@ describe('ProductTypeRepository aggregate update constraints', () => {
   });
 
   it('returns the number of products created from every type', async () => {
-    productTypeStore.findAndCount.mockResolvedValueOnce([
-      [
+    jest.spyOn(CursorPagination.prototype, 'read').mockResolvedValueOnce({
+      items: [
         { uuid, name: 'Clothes' },
         { uuid: '22222222-2222-4222-8222-222222222222', name: 'Electronics' },
       ],
-      2,
-    ]);
+      meta: { limit: 50, nextToken: null },
+    });
     countQuery.getRawMany.mockResolvedValueOnce([
       { typeUuid: uuid, activeProductCount: '3', archivedProductCount: '2' },
     ]);
 
-    const page = await repository.getAll(50, 0);
+    const page = await repository.getAll(50);
 
     expect(page.items.map((item) => [item.activeProductCount, item.archivedProductCount])).toEqual([
       [3, 2],

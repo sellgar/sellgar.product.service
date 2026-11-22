@@ -1,3 +1,4 @@
+import { CursorPagination, CursorPage } from '@sellgar/pagination';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, QueryFailedError } from 'typeorm';
@@ -18,30 +19,27 @@ export class PropertyRepository {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly productOutbox: ProductOutboxService,
+    private readonly pagination: CursorPagination,
   ) {}
 
-  async getAll(
-    limit: number,
-    offset: number,
-  ): Promise<{ items: PropertyModel[]; total: number; limit: number; offset: number }> {
+  async getAll(limit: number, nextToken?: string): Promise<CursorPage<PropertyModel>> {
     const repository = this.dataSource.getRepository(PropertyModel);
-    const [page, total] = await repository.findAndCount({
-      order: { code: 'ASC' },
-      take: limit,
-      skip: offset,
-    });
-
-    if (page.length === 0) return { items: [], total, limit, offset };
-
-    const items = await repository.find({
-      where: { code: In(page.map((property) => property.code)) },
-      relations: { unit: true, options: { extras: true } },
-      order: {
-        code: 'ASC',
-        options: { sortOrder: 'ASC', code: 'ASC', extras: { sortOrder: 'ASC', type: 'ASC' } },
+    const page = await this.pagination.read(
+      repository.createQueryBuilder('property'),
+      { limit, nextToken },
+      {
+        scope: 'product.property.list',
+        filters: {},
+        order: [{ expression: 'property.code', direction: 'ASC', type: 'text' }],
       },
+    );
+    if (page.items.length === 0) return page;
+    const items = await repository.find({
+      where: { code: In(page.items.map((property) => property.code)) },
+      relations: { unit: true, options: { extras: true } },
+      order: { code: 'ASC', options: { sortOrder: 'ASC', code: 'ASC', extras: { sortOrder: 'ASC', type: 'ASC' } } },
     });
-    return { items, total, limit, offset };
+    return { items, meta: page.meta };
   }
 
   getByCode(code: string): Promise<PropertyModel> {

@@ -30,14 +30,14 @@ export class ProductService {
 
   async getAll(
     limit: number,
-    offset: number,
+    nextToken?: string,
     status?: ProductStatus,
     typeUuid?: string,
     filters: ProductPropertyFilterCommand[] = [],
     term?: string,
   ): Promise<ProductPageEntity> {
     const normalizedFilters = await this.filterService.normalize(filters);
-    const page = await this.repository.getAll(limit, offset, status, typeUuid, normalizedFilters, term);
+    const page = await this.repository.getAll(limit, nextToken, status, typeUuid, normalizedFilters, term);
     return { ...page, items: page.items.map((product) => ProductEntity.fromModel(product)) };
   }
 

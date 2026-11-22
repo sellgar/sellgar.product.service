@@ -18,8 +18,8 @@ import { UpdatePropertyOptionCommand } from './command/update-property-option.co
 export class PropertyService {
   constructor(private readonly propertyRepository: PropertyRepository) {}
 
-  async getAll(limit: number, offset: number): Promise<PropertyPageEntity> {
-    const page = await this.propertyRepository.getAll(limit, offset);
+  async getAll(limit: number, nextToken?: string): Promise<PropertyPageEntity> {
+    const page = await this.propertyRepository.getAll(limit, nextToken);
     return { ...page, items: page.items.map(PropertyEntity.fromModel) };
   }
 

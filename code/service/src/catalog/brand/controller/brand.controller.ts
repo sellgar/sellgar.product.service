@@ -17,7 +17,7 @@ export class BrandController {
 
   @MessagePattern({ cmd: 'catalog.v2.brand.getAll' })
   getAll(@Payload() dto: GetAllBrandsDto) {
-    return this.service.getAll(dto.limit, dto.offset);
+    return this.service.getAll(dto.limit, dto.nextToken);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.brand.getByCode' })

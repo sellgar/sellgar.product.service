@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 
 import { CreateUnitDto } from './create-unit.dto';
@@ -28,7 +29,8 @@ describe('Unit DTO', () => {
   it('applies bounded pagination defaults', async () => {
     await expect(pipe.transform({}, { type: 'body', metatype: GetAllUnitsDto })).resolves.toEqual({
       limit: 50,
-      offset: 0,
+      nextToken: undefined,
+      offset: undefined,
     });
     await expect(pipe.transform({ limit: 101 }, { type: 'body', metatype: GetAllUnitsDto })).rejects.toBeInstanceOf(
       BadRequestException,

@@ -8,8 +8,8 @@ import { UpdateBrandCommand } from './command/update-brand.command';
 export class BrandService {
   constructor(private readonly repository: BrandRepository) {}
 
-  getAll(limit: number, offset: number) {
-    return this.repository.getAll(limit, offset);
+  getAll(limit: number, nextToken?: string) {
+    return this.repository.getAll(limit, nextToken);
   }
   getByCode(code: string) {
     return this.repository.getByCode(code);

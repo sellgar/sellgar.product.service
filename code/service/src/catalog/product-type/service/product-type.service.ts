@@ -13,8 +13,8 @@ import { UpdateProductTypeCommand } from './command/update-product-type.command'
 export class ProductTypeService {
   constructor(private readonly repository: ProductTypeRepository) {}
 
-  async getAll(limit: number, offset: number): Promise<ProductTypePageEntity> {
-    const page = await this.repository.getAll(limit, offset);
+  async getAll(limit: number, nextToken?: string): Promise<ProductTypePageEntity> {
+    const page = await this.repository.getAll(limit, nextToken);
     return { ...page, items: page.items.map(ProductTypeEntity.fromModel) };
   }
 

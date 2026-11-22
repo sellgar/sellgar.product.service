@@ -85,3 +85,21 @@ infrastructure `bootstrap/runner/README.md`.
 Readiness HTTP не управляет доставкой RabbitMQ-команд; отсутствие потерь при
 rollout не обещается без отдельной проверки транспорта. Бизнес-контракты:
 `code/service/README.md`, `REWRITE-CONTRACT.md`.
+
+## Курсорные списки
+
+Самостоятельные списки принимают `{ limit?: number, nextToken?: string, ...filters }`
+и возвращают `{ items, meta: { limit, nextToken: string | null } }`.
+Размер пачки по умолчанию 50, максимум 100. OFFSET и общее количество удалены;
+при продолжении нужно передавать прежние фильтры. Новый фильтр/сортировка — новый
+список без токена. Корни выбираются до relations; коллекции карточек и снимков
+остаются полными. Последний ключ сортировки — уникальный PK.
+
+Пакет `@sellgar/pagination` подключён через nested submodule; build и unit image
+сначала собирают его. `PaginationModule` требует `PAGINATION_TOKEN_SECRET` минимум
+32 байта, одинаковый у реплик сервиса. Helm читает его из Secret `product-pagination`,
+ключ `token-secret`. Ansible infrastructure создаёт отсутствующие ключи командой
+`.venv/bin/ansible-playbook -i inventory/dev.yml secrets.yml --tags pagination` из ansible/
+без замены существующих значений. Локально ключ задаётся окружением; в Git его нет.
+Отсутствие/слабый ключ блокирует настройку пагинации. HMAC не предоставляет доступ:
+ограничения магазина/владельца применяются заново к каждому запросу.

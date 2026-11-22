@@ -1,3 +1,4 @@
+import { PaginationModule } from '@sellgar/pagination';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -15,6 +16,7 @@ import { ProductOutboxModule } from './integration/outbox/product-outbox.module'
 
 @Module({
   imports: [
+    PaginationModule,
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     TypeOrmModule.forRootAsync({ useFactory: () => databaseOptions(process.env) }),
     HealthModule,

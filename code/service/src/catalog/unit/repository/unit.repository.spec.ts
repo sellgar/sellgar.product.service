@@ -1,13 +1,19 @@
 import 'reflect-metadata';
+
+import { CursorPagination } from '@sellgar/pagination';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
+
 import { UnitModel } from '../unit.model';
 import { UnitRepository } from './unit.repository';
 
 describe('Unit versioned updates', () => {
   const manager = { findOne: jest.fn(), save: jest.fn(), insert: jest.fn(), findOneByOrFail: jest.fn() };
   const dataSource = { transaction: jest.fn(async (work: (value: unknown) => unknown) => work(manager)) };
-  const repository = new UnitRepository(dataSource as unknown as DataSource);
+  const repository = new UnitRepository(
+    dataSource as unknown as DataSource,
+    new CursorPagination('test-pagination-key-at-least-32-bytes'),
+  );
 
   beforeEach(() => jest.clearAllMocks());
 

@@ -24,7 +24,7 @@ export class ProductController {
   @MessagePattern({ cmd: 'catalog.v2.product.getAll' })
   async getAll(@Payload() dto: GetAllProductsDto) {
     const filters = await this.commandMapper.toFilterCommands(dto.filters ?? []);
-    return this.service.getAll(dto.limit, dto.offset, dto.status, dto.typeUuid, filters, dto.term);
+    return this.service.getAll(dto.limit, dto.nextToken, dto.status, dto.typeUuid, filters, dto.term);
   }
 
   @MessagePattern({ cmd: 'catalog.v2.product.getByUuid' })

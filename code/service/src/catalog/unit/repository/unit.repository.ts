@@ -1,19 +1,24 @@
+import { CursorPagination } from '@sellgar/pagination';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError } from 'typeorm';
+
 import { UnitModel } from '../unit.model';
 
 @Injectable()
 export class UnitRepository {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly pagination: CursorPagination,
+  ) {}
 
-  async getAll(limit: number, offset: number) {
-    const [items, total] = await this.dataSource.getRepository(UnitModel).findAndCount({
-      order: { code: 'ASC' },
-      take: limit,
-      skip: offset,
-    });
-    return { items, total, limit, offset };
+  async getAll(limit: number, nextToken?: string) {
+    const page = await this.pagination.read(
+      this.dataSource.getRepository(UnitModel).createQueryBuilder('unit'),
+      { limit, nextToken },
+      { scope: 'product.unit.list', filters: {}, order: [{ expression: 'unit.code', direction: 'ASC', type: 'text' }] },
+    );
+    return page;
   }
 
   async getByCode(code: string) {

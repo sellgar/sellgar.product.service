@@ -1,8 +1,8 @@
+import { CursorMetaEntity } from '@sellgar/pagination';
+
 import { ProductTypeEntity } from './product-type.entity';
 
 export class ProductTypePageEntity {
   items: ProductTypeEntity[];
-  total: number;
-  limit: number;
-  offset: number;
+  meta: CursorMetaEntity;
 }
