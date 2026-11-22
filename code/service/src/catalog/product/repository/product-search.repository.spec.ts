@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { ProductOutboxService } from '../../../integration/outbox/product-outbox.service';
 import { ProductSnapshotService } from '../../../integration/outbox/product-snapshot.service';
 import { ProductRepository } from './product.repository';
+import { ProductStatus } from '../product-status.enum';
 
 const createFixture = () => {
   const query = {
@@ -12,8 +13,11 @@ const createFixture = () => {
     orderBy: jest.fn().mockReturnThis(),
     addOrderBy: jest.fn().mockReturnThis(),
   };
-  const dataSource = {
+  const manager = {
     getRepository: jest.fn().mockReturnValue({ createQueryBuilder: jest.fn().mockReturnValue(query) }),
+  };
+  const dataSource = {
+    transaction: jest.fn((_isolation, callback) => callback(manager)),
   } as unknown as DataSource;
 
   const repository = new ProductRepository(
@@ -66,7 +70,9 @@ describe('ProductRepository search', () => {
   it('без поискового запроса сохраняет прежнюю выборку', async () => {
     const { repository, query } = createFixture();
     await repository.getAll(20, undefined);
-    expect(query.andWhere).not.toHaveBeenCalled();
+    expect(query.andWhere).toHaveBeenCalledWith('product.status != :archivedStatus', {
+      archivedStatus: ProductStatus.ARCHIVED,
+    });
     expect(query.addSelect).not.toHaveBeenCalled();
     expect(query.orderBy).toHaveBeenCalledWith('product.uuid', 'ASC');
   });

@@ -2,7 +2,7 @@ import { CursorPagination, CursorPage, CursorOrder } from '@sellgar/pagination';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { DataSource, EntityManager, In, QueryFailedError, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, In, Not, QueryFailedError, SelectQueryBuilder } from 'typeorm';
 
 import { ImageModel } from '../../image/infrastructure/persistence/model/image.model';
 import { ProductTypeModel } from '../../product-type/product-type.model';
@@ -25,6 +25,8 @@ import { VariantPropertyValueModel } from '../variant-property-value.model';
 import { VariantPropertyModel } from '../variant-property.model';
 import { ProductOutboxService } from '../../../integration/outbox/product-outbox.service';
 import { ProductSnapshotService } from '../../../integration/outbox/product-snapshot.service';
+import { PRODUCT_READ_RELATIONS } from './product-read.relations';
+import { sortProductRelations } from './sort-product-relations';
 
 @Injectable()
 export class ProductRepository {
@@ -43,41 +45,43 @@ export class ProductRepository {
     filters: ProductPropertyFilterCommand[] = [],
     term?: string,
   ): Promise<CursorPage<ProductModel>> {
-    const query = this.dataSource.getRepository(ProductModel).createQueryBuilder('product');
-    if (term) {
-      query.andWhere('product.search_vector @@ product_search_query(:term)', { term });
-      query.addSelect('ts_rank_cd(product.search_vector, product_search_query(:term), 32)', 'search_rank');
-      query.orderBy('search_rank', 'DESC').addOrderBy('product.uuid', 'ASC');
-    } else {
-      query.orderBy('product.uuid', 'ASC');
-    }
-    if (status !== undefined) query.andWhere('product.status = :status', { status });
-    if (typeUuid !== undefined) query.andWhere('product.type_uuid = :typeUuid', { typeUuid });
-    filters.forEach((filter, index) => this.applyFilter(query, filter, index));
-    const order: CursorOrder[] = [];
-    if (term)
-      order.push({
-        expression: 'ts_rank_cd(product.search_vector, product_search_query(:term), 32)',
-        direction: 'DESC',
-        type: 'real',
-      });
-    order.push({ expression: 'product.uuid', direction: 'ASC', type: 'uuid' });
-    const page = await this.pagination.read(
-      query,
-      { limit, nextToken },
-      {
-        scope: 'product.product.list',
-        filters: { status, typeUuid, filters, term },
-        order,
-      },
-    );
-    if (page.items.length === 0) return page;
-    const items = await this.snapshots.getMany(
-      this.dataSource.manager,
-      page.items.map((product) => product.uuid),
-    );
-    const byUuid = new Map(items.map((product) => [product.uuid, product]));
-    return { items: page.items.map((product) => byUuid.get(product.uuid)!), meta: page.meta };
+    return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
+      const query = manager.getRepository(ProductModel).createQueryBuilder('product');
+      query.andWhere('product.status != :archivedStatus', { archivedStatus: ProductStatus.ARCHIVED });
+      if (term) {
+        query.andWhere('product.search_vector @@ product_search_query(:term)', { term });
+        query.addSelect('ts_rank_cd(product.search_vector, product_search_query(:term), 32)', 'search_rank');
+        query.orderBy('search_rank', 'DESC').addOrderBy('product.uuid', 'ASC');
+      } else {
+        query.orderBy('product.uuid', 'ASC');
+      }
+      if (status !== undefined) query.andWhere('product.status = :status', { status });
+      if (typeUuid !== undefined) query.andWhere('product.type_uuid = :typeUuid', { typeUuid });
+      filters.forEach((filter, index) => this.applyFilter(query, filter, index));
+      const order: CursorOrder[] = [];
+      if (term)
+        order.push({
+          expression: 'ts_rank_cd(product.search_vector, product_search_query(:term), 32)',
+          direction: 'DESC',
+          type: 'real',
+        });
+      order.push({ expression: 'product.uuid', direction: 'ASC', type: 'uuid' });
+      const page = await this.pagination.read(
+        query,
+        { limit, nextToken },
+        {
+          scope: 'product.product.list',
+          filters: { status, typeUuid, filters, term },
+          order,
+        },
+      );
+      if (page.items.length === 0) return page;
+      const items = await this.readAvailable(
+        manager,
+        page.items.map((product) => product.uuid),
+      );
+      return { items, meta: page.meta };
+    });
   }
 
   private applyFilter(
@@ -129,26 +133,32 @@ export class ProductRepository {
     const exists =
       filter.level === ProductTypeFieldLevel.PRODUCT
         ? `EXISTS (SELECT 1 FROM product_property_value ${valueAlias} WHERE ${valueAlias}.product_uuid = product.uuid AND ${valueAlias}.type_uuid = product.type_uuid AND ${predicates.join(' AND ')})`
-        : `EXISTS (SELECT 1 FROM variant ${variantAlias} INNER JOIN variant_property_value ${valueAlias} ON ${valueAlias}.variant_uuid = ${variantAlias}.uuid AND ${valueAlias}.type_uuid = ${variantAlias}.type_uuid WHERE ${variantAlias}.product_uuid = product.uuid AND ${predicates.join(' AND ')})`;
+        : `EXISTS (SELECT 1 FROM variant ${variantAlias} INNER JOIN variant_property_value ${valueAlias} ON ${valueAlias}.variant_uuid = ${variantAlias}.uuid AND ${valueAlias}.type_uuid = ${variantAlias}.type_uuid WHERE ${variantAlias}.product_uuid = product.uuid AND ${variantAlias}.status != :archivedStatus AND ${predicates.join(' AND ')})`;
     query.andWhere(exists, parameters);
   }
 
   getByUuid(uuid: string, withEmptyProperties = true): Promise<ProductModel> {
-    if (withEmptyProperties) return this.read(this.dataSource.manager, uuid);
+    return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
+      if (!withEmptyProperties) return this.readFilledProperties(manager, uuid);
+      const [product] = await this.readAvailable(manager, [uuid]);
+      return product;
+    });
+  }
 
-    return this.dataSource.transaction('REPEATABLE READ', (manager) => this.readFilledProperties(manager, uuid));
+  getSnapshot(uuid: string): Promise<ProductModel> {
+    return this.read(this.dataSource.manager, uuid);
   }
 
   async getVariants(productUuid: string, variantUuid?: string) {
     return this.dataSource.manager.transaction('REPEATABLE READ', async (manager) => {
       const product = await manager.findOne(ProductModel, {
-        where: { uuid: productUuid },
+        where: { uuid: productUuid, status: Not(ProductStatus.ARCHIVED) },
         relations: { productType: { variantFields: { property: { unit: true, options: { extras: true } } } } },
         relationLoadStrategy: 'query',
       });
       if (!product) throw new NotFoundException(`Product ${productUuid} not found`);
       const variants = await manager.find(VariantModel, {
-        where: { productUuid, ...(variantUuid ? { uuid: variantUuid } : {}) },
+        where: { productUuid, status: Not(ProductStatus.ARCHIVED), ...(variantUuid ? { uuid: variantUuid } : {}) },
         relations: { properties: { values: true }, images: { image: true } },
         relationLoadStrategy: 'query',
         order: { uuid: 'ASC' },
@@ -504,11 +514,16 @@ export class ProductRepository {
 
   private async readFilledProperties(manager: EntityManager, uuid: string): Promise<ProductModel> {
     const product = await manager.findOne(ProductModel, {
-      where: { uuid },
-      relations: { productType: true, variants: { images: { image: true } } },
+      where: { uuid, status: Not(ProductStatus.ARCHIVED) },
+      relations: { productType: true },
       relationLoadStrategy: 'query',
     });
     if (!product) throw new NotFoundException(`Product ${uuid} not found`);
+    product.variants = await manager.find(VariantModel, {
+      where: { productUuid: uuid, status: Not(ProductStatus.ARCHIVED) },
+      relations: { images: { image: true } },
+      relationLoadStrategy: 'query',
+    });
 
     const productProperties = manager.createQueryBuilder(ProductPropertyModel, 'assignment').setFindOptions({
       where: { productUuid: uuid },
@@ -568,6 +583,32 @@ export class ProductRepository {
       );
     }
     return product;
+  }
+
+  private async readAvailable(manager: EntityManager, uuids: string[]): Promise<ProductModel[]> {
+    const products = await manager.find(ProductModel, {
+      where: { uuid: In(uuids), status: Not(ProductStatus.ARCHIVED) },
+      relations: PRODUCT_READ_RELATIONS,
+      relationLoadStrategy: 'query',
+    });
+    const variants = await manager.find(VariantModel, {
+      where: { productUuid: In(uuids), status: Not(ProductStatus.ARCHIVED) },
+      relations: { properties: { values: true }, images: { image: true } },
+      relationLoadStrategy: 'query',
+    });
+    const byUuid = new Map(
+      products.map((product) => {
+        product.variants = [];
+        return [product.uuid, product] as const;
+      }),
+    );
+    for (const variant of variants) byUuid.get(variant.productUuid)?.variants.push(variant);
+    return uuids.map((uuid) => {
+      const product = byUuid.get(uuid);
+      if (!product) throw new NotFoundException(`Product ${uuid} not found`);
+      sortProductRelations(product);
+      return product;
+    });
   }
 
   private async read(manager: EntityManager, uuid: string): Promise<ProductModel> {

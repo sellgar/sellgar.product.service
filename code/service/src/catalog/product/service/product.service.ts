@@ -45,6 +45,10 @@ export class ProductService {
     return ProductEntity.fromModel(await this.repository.getByUuid(uuid, withEmptyProperties), withEmptyProperties);
   }
 
+  async getSnapshot(uuid: string): Promise<ProductEntity> {
+    return ProductEntity.fromModel(await this.repository.getSnapshot(uuid));
+  }
+
   async getVariants(productUuid: string): Promise<VariantListEntity> {
     const { product, variants } = await this.repository.getVariants(productUuid);
     return {
@@ -95,7 +99,7 @@ export class ProductService {
   }
 
   async update(command: UpdateProductCommand): Promise<ProductEntity> {
-    const product = await this.repository.getByUuid(command.uuid);
+    const product = await this.repository.getSnapshot(command.uuid);
     this.assertTypeVersion(product.productType.version, command.typeVersion);
     const properties =
       command.properties === undefined
@@ -110,7 +114,7 @@ export class ProductService {
   }
 
   async createVariant(command: CreateVariantCommand): Promise<ProductEntity> {
-    const product = await this.repository.getByUuid(command.productUuid);
+    const product = await this.repository.getSnapshot(command.productUuid);
     this.assertTypeVersion(product.productType.version, command.typeVersion);
     const variant = plainToInstance(VariantInputCommand, {
       ...command.variant,
@@ -127,7 +131,7 @@ export class ProductService {
   }
 
   async updateVariant(command: UpdateVariantCommand): Promise<ProductEntity> {
-    const product = await this.repository.getByUuid(command.productUuid);
+    const product = await this.repository.getSnapshot(command.productUuid);
     this.assertTypeVersion(product.productType.version, command.typeVersion);
     const properties =
       command.properties === undefined

@@ -4,6 +4,21 @@
 Исходники: `code/service`, общая outbox-библиотека: `code/library/sellgar.outbox.library`.
 Старая реализация сохранена в `code/_service` и не входит в сборку.
 
+## Обычное чтение и интеграционные снимки
+
+`catalog.v2.product.getAll`, `getByUuid`, `variant.getAll` и `variant.getByUuid`
+исключают архивные Product/Variant в запросах к БД. Вложенные варианты и поиск
+по их свойствам следуют тому же правилу. Обычное чтение архивного UUID даёт NotFound;
+передача status=archived не снимает ограничение. Страницы формируются после SQL-отбора.
+
+`catalog.v2.product.getSnapshot { uuid }` — отдельная внутренняя RMQ-команда полного
+снимка для recovery Store/Cart. Она сохраняет архивный корень, варианты и их состояния,
+как и outbox. Редактирование архива и восстановление сохраняют прежнее поведение.
+Правила зависимых сущностей Store/Cart этим изменением не вводятся.
+
+Порядок публикации: сначала Product с новой snapshot-командой, затем Store и Cart,
+которые используют её для восстановления проекций. Миграции БД не требуются.
+
 ## Проверка
 
 Из `code/`: `yarn build:product_srv` и `yarn workspace @service/product test --runInBand`.

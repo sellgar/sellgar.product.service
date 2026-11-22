@@ -32,6 +32,11 @@ export class ProductController {
     return this.service.getByUuid(dto.uuid, dto.withEmptyProperties ?? true);
   }
 
+  @MessagePattern({ cmd: 'catalog.v2.product.getSnapshot' })
+  getSnapshot(@Payload() dto: ProductUuidDto) {
+    return this.service.getSnapshot(dto.uuid);
+  }
+
   @MessagePattern({ cmd: 'catalog.v2.product.variant.getAll' })
   getVariants(@Payload() dto: ProductUuidDto) {
     return this.service.getVariants(dto.uuid);

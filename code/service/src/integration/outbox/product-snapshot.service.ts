@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EntityManager, FindOptionsRelations, In } from 'typeorm';
+import { EntityManager, In } from 'typeorm';
 
 import { ProductModel } from '../../catalog/product/product.model';
+import { PRODUCT_READ_RELATIONS } from '../../catalog/product/repository/product-read.relations';
+import { sortProductRelations } from '../../catalog/product/repository/sort-product-relations';
 
 @Injectable()
 export class ProductSnapshotService {
@@ -18,7 +20,10 @@ export class ProductSnapshotService {
 
     const products = await manager.find(ProductModel, {
       where: { uuid: In(uuids) },
-      relations: this.relations,
+      relations: {
+        ...PRODUCT_READ_RELATIONS,
+        variants: { properties: { values: true }, images: { image: true } },
+      },
       relationLoadStrategy: 'query',
     });
     const byUuid = new Map(products.map((product) => [product.uuid, product]));
@@ -26,42 +31,8 @@ export class ProductSnapshotService {
     return uuids.map((uuid) => {
       const product = byUuid.get(uuid);
       if (!product) throw new NotFoundException(`Product ${uuid} not found`);
-      this.sortRelations(product);
+      sortProductRelations(product);
       return product;
     });
   }
-
-  private sortRelations(product: ProductModel): void {
-    const byCode = (left: { propertyCode: string }, right: { propertyCode: string }) =>
-      left.propertyCode.localeCompare(right.propertyCode);
-    const byPosition = (left: { position: number }, right: { position: number }) => left.position - right.position;
-    const byField = (
-      left: { sortOrder: number; propertyCode: string },
-      right: { sortOrder: number; propertyCode: string },
-    ) => left.sortOrder - right.sortOrder || byCode(left, right);
-
-    // Nested SQL order adds JOINs even with query loading. Sort the loaded collections instead.
-    product.productType.productFields.sort(byField);
-    product.productType.variantFields.sort(byField);
-    product.properties.sort(byCode);
-    for (const property of product.properties) property.values.sort(byPosition);
-    product.variants.sort((left, right) => left.uuid.localeCompare(right.uuid));
-    for (const variant of product.variants) {
-      variant.properties.sort(byCode);
-      for (const property of variant.properties) property.values.sort(byPosition);
-      variant.images.sort(
-        (left, right) => left.sortOrder - right.sortOrder || left.imageUuid.localeCompare(right.imageUuid),
-      );
-    }
-  }
-
-  private readonly relations: FindOptionsRelations<ProductModel> = {
-    brand: true,
-    productType: {
-      productFields: { property: { unit: true, options: { extras: true } } },
-      variantFields: { property: { unit: true, options: { extras: true } } },
-    },
-    properties: { values: true },
-    variants: { properties: { values: true }, images: { image: true } },
-  };
 }

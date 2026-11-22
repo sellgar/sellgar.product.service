@@ -13,6 +13,7 @@ import { BrandModel } from '../../catalog/brand/brand.model';
 import { ProductTypeModel } from '../../catalog/product-type/product-type.model';
 import { TypeProductFieldModel } from '../../catalog/product-type/type-product-field.model';
 import { TypeVariantFieldModel } from '../../catalog/product-type/type-variant-field.model';
+import { ProductTypeFieldLevel } from '../../catalog/product-type/product-type-field-level.enum';
 import { PropertyModel } from '../../catalog/property/property.model';
 import { PropertyKind } from '../../catalog/property/property-kind.enum';
 import { UnitModel } from '../../catalog/unit/unit.model';
@@ -54,6 +55,7 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
     database = new DataSource({
       ...options,
       schema,
+      extra: { options: `-c search_path=${schema},public` },
       logger: {
         logQuery(query) {
           queries.push(query);
@@ -354,5 +356,116 @@ describeDatabase('Product snapshots with multiple collections on PostgreSQL', ()
     expect(result.variants.map((variant) => variant.uuid)).toEqual([variantUuids[0]]);
     expect(result.product.productType.variantFields).toHaveLength(1);
     await expect(repository.getVariants(otherProductUuid, variantUuids[0])).rejects.toThrow('not found');
+  });
+
+  it('excludes archived roots and variants from ordinary reads while retaining full snapshots', async () => {
+    const runner = database.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction('REPEATABLE READ');
+    try {
+      const manager = runner.manager;
+      await manager.update(ProductModel, otherProductUuid, { status: ProductStatus.ARCHIVED });
+      await manager.update(VariantModel, variantUuids[0], { status: ProductStatus.ARCHIVED });
+      const repository = new ProductRepository(
+        { transaction: (_isolation, callback) => callback(manager), manager } as DataSource,
+        {} as ProductOutboxService,
+        snapshots,
+        new CursorPagination('test-pagination-key-at-least-32-bytes'),
+      );
+      const expectedVariants = variantUuids.slice(1);
+      for (const withEmptyProperties of [true, false]) {
+        const ordinary = await repository.getByUuid(productUuid, withEmptyProperties);
+        expect(ordinary.variants.map((variant) => variant.uuid)).toEqual(expectedVariants);
+        await expect(repository.getByUuid(otherProductUuid, withEmptyProperties)).rejects.toMatchObject({
+          status: 404,
+        });
+      }
+      expect((await repository.getVariants(productUuid)).variants.map((variant) => variant.uuid)).toEqual(
+        expectedVariants,
+      );
+      await expect(repository.getVariants(productUuid, variantUuids[0])).rejects.toMatchObject({ status: 404 });
+      await expect(repository.getVariants(otherProductUuid)).rejects.toMatchObject({ status: 404 });
+      const page = await repository.getAll(1);
+      expect(page.items.map((item) => item.uuid)).toEqual([productUuid]);
+      expect(page.items[0].variants.map((variant) => variant.uuid)).toEqual(expectedVariants);
+      expect(page.meta.nextToken).toBeNull();
+      expect((await repository.getAll(10, undefined, ProductStatus.ARCHIVED)).items).toEqual([]);
+      expect((await repository.getSnapshot(productUuid)).variants).toHaveLength(variantUuids.length);
+      expect((await repository.getSnapshot(otherProductUuid)).status).toBe(ProductStatus.ARCHIVED);
+    } finally {
+      await runner.rollbackTransaction();
+      await runner.release();
+    }
+  });
+
+  it('does not match a property belonging only to an archived variant', async () => {
+    const runner = database.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction('REPEATABLE READ');
+    try {
+      const manager = runner.manager;
+      await manager.update(
+        VariantPropertyValueModel,
+        { variantUuid: variantUuids[0], position: 0 },
+        { valueOptionCode: 'option-4' },
+      );
+      const repository = new ProductRepository(
+        { transaction: (_isolation, callback) => callback(manager), manager } as DataSource,
+        {} as ProductOutboxService,
+        snapshots,
+        new CursorPagination('test-pagination-key-at-least-32-bytes'),
+      );
+      const filters = [
+        { level: ProductTypeFieldLevel.VARIANT, propertyCode: 'variant-option', optionCodes: ['option-4'] },
+      ];
+      expect(
+        (await repository.getAll(10, undefined, undefined, undefined, filters)).items.map((item) => item.uuid),
+      ).toEqual([productUuid]);
+      await manager.update(VariantModel, variantUuids[0], { status: ProductStatus.ARCHIVED });
+      expect((await repository.getAll(10, undefined, undefined, undefined, filters)).items).toEqual([]);
+    } finally {
+      await runner.rollbackTransaction();
+      await runner.release();
+    }
+  });
+
+  it('preserves archive editing, restoration and full event payloads', async () => {
+    const runner = database.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction('REPEATABLE READ');
+    try {
+      const manager = runner.manager;
+      await manager.update(ProductModel, productUuid, { status: ProductStatus.ARCHIVED });
+      await manager.update(VariantModel, variantUuids[0], { status: ProductStatus.ARCHIVED });
+      const add = jest.fn().mockResolvedValue(undefined);
+      const outbox = new ProductOutboxService({ add } as unknown as OutboxWriter, snapshots);
+      const repository = new ProductRepository(
+        { manager, transaction: (isolation, callback) => (callback ?? isolation)(manager) } as DataSource,
+        outbox,
+        snapshots,
+        new CursorPagination('test-pagination-key-at-least-32-bytes'),
+      );
+      const service = new ProductService(
+        repository,
+        {} as ProductTypeRepository,
+        {} as PropertyAssignmentService,
+        {} as ProductFilterService,
+      );
+      const updated = await service.update({ uuid: productUuid, version: 1, typeVersion: 1, name: 'Edited archive' });
+      expect(updated.status).toBe(ProductStatus.ARCHIVED);
+      expect(updated.variants).toHaveLength(variantUuids.length);
+      const controller = new ProductController(service, {} as ProductCommandMapper);
+      expect((await controller.getSnapshot({ uuid: productUuid })).variants).toHaveLength(variantUuids.length);
+      const restored = await service.restore(productUuid, updated.version);
+      expect(restored.status).toBe(ProductStatus.ACTIVE);
+      expect(restored.variants.find((variant) => variant.uuid === variantUuids[0])?.status).toBe(
+        ProductStatus.ARCHIVED,
+      );
+      expect((await service.getByUuid(productUuid)).variants).toHaveLength(variantUuids.length - 1);
+      expect(add.mock.calls.every(([, event]) => event.payload.variants.length === variantUuids.length)).toBe(true);
+    } finally {
+      await runner.rollbackTransaction();
+      await runner.release();
+    }
   });
 });
