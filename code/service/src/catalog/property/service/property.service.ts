@@ -4,6 +4,8 @@ import { plainToInstance } from 'class-transformer';
 import { PropertyEntity } from '../entity/property.entity';
 import { PropertyPageEntity } from '../entity/property-page.entity';
 import { PropertyKind } from '../property-kind.enum';
+import { PropertySortField } from '../property-sort-field.enum';
+import { PropertySortDirection } from '../property-sort-direction.enum';
 import { PropertyOptionExtraKind } from '../property-option-extra-kind.enum';
 import { PropertyOptionTextDisplay } from '../property-option-text-display.enum';
 import { PropertyRepository } from '../repository/property.repository';
@@ -18,8 +20,14 @@ import { UpdatePropertyOptionCommand } from './command/update-property-option.co
 export class PropertyService {
   constructor(private readonly propertyRepository: PropertyRepository) {}
 
-  async getAll(limit: number, nextToken?: string): Promise<PropertyPageEntity> {
-    const page = await this.propertyRepository.getAll(limit, nextToken);
+  async getAll(
+    limit: number,
+    nextToken?: string,
+    search?: string,
+    sortBy?: PropertySortField,
+    sortDirection?: PropertySortDirection,
+  ): Promise<PropertyPageEntity> {
+    const page = await this.propertyRepository.getAll(limit, nextToken, search, sortBy, sortDirection);
     return { ...page, items: page.items.map(PropertyEntity.fromModel) };
   }
 

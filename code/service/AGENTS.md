@@ -85,6 +85,26 @@
 Проверки из `code/`: `yarn build:product_srv`.
 Из `code/service`: `yarn test --runInBand`.
 
+## Поиск и сортировка свойств
+
+- `catalog.v2.property.getAll` принимает `search` (до 256 символов), `sortBy`,
+  `sortDirection`, `limit`, `nextToken`; ответ остаётся `items/meta`, без COUNT.
+- `property.search_vector` — STORED generated column по названию (вес A), коду
+  (B) и описанию (C), с GIN. Функция сервиса `product_search_query` уже реализует
+  безопасный разбор слов, префиксы и русские словоформы; свойства переиспользуют
+  её. Изменение исходных полей сразу обновляет документ.
+- `sortBy`: name, code, createdAt, updatedAt, relevance. Без поиска по умолчанию
+  name/asc, с поиском relevance/desc. relevance без search отклоняется.
+  Имена SQL-колонок выбирает repository из закрытого набора. Последний ключ —
+  уникальный code; текст, поле и направление входят в контекст HMAC-курсора.
+- Индексы (name, code), (created_at, code), (updated_at, code) поддерживают
+  обычные сортировки. Поисковые результаты после загрузки связей сохраняют
+  порядок страницы; вложенные options/extras не обрезаются.
+- PostgreSQL-проверка из `code/service`:
+  `PRODUCT_PROPERTY_DATABASE_TESTS=1 node --experimental-vm-modules --env-file=.env ../node_modules/jest/bin/jest.js property-pagination.integration.spec.ts --runInBand`.
+  Тесты используют отдельную схему в транзакции с откатом, включая 20 тысяч
+  записей и EXPLAIN с проверкой GIN.
+
 Внутренний `GET /health` на `PORT` (default 8080) отражает PostgreSQL и оба
 RMQ consumer. Доменные команды и event-контракты при деплое не изменяются.
 

@@ -1,9 +1,11 @@
-import { CursorPagination, CursorPage } from '@sellgar/pagination';
+import { CursorOrder, CursorPagination, CursorPage } from '@sellgar/pagination';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, QueryFailedError } from 'typeorm';
 
 import { PropertyKind } from '../property-kind.enum';
+import { PropertySortField } from '../property-sort-field.enum';
+import { PropertySortDirection } from '../property-sort-direction.enum';
 import { PropertyOptionExtraModel } from '../property-option-extra.model';
 import { PropertyOptionModel } from '../property-option.model';
 import { PropertyModel } from '../property.model';
@@ -22,15 +24,60 @@ export class PropertyRepository {
     private readonly pagination: CursorPagination,
   ) {}
 
-  async getAll(limit: number, nextToken?: string): Promise<CursorPage<PropertyModel>> {
+  async getAll(
+    limit: number,
+    nextToken?: string,
+    search?: string,
+    sortBy?: PropertySortField,
+    sortDirection?: PropertySortDirection,
+  ): Promise<CursorPage<PropertyModel>> {
     const repository = this.dataSource.getRepository(PropertyModel);
+    const term = search?.trim() || undefined;
+    const query = repository.createQueryBuilder('property');
+    const order: CursorOrder[] = [];
+    const field = sortBy ?? (term ? PropertySortField.RELEVANCE : PropertySortField.NAME);
+    const direction =
+      sortDirection ?? (field === PropertySortField.RELEVANCE ? PropertySortDirection.DESC : PropertySortDirection.ASC);
+    const sqlDirection = direction === PropertySortDirection.DESC ? 'DESC' : 'ASC';
+
+    if (term) {
+      query.andWhere('property.search_vector @@ product_search_query(:search)', { search: term });
+    }
+
+    if (field === PropertySortField.RELEVANCE) {
+      if (!term) throw new BadRequestException('Relevance sorting requires search');
+      order.push({
+        expression: 'ts_rank_cd(property.search_vector, product_search_query(:search), 32)',
+        direction: sqlDirection,
+        type: 'real',
+      });
+    } else if (field !== PropertySortField.CODE) {
+      const columns = {
+        [PropertySortField.NAME]: 'property.name',
+        [PropertySortField.CREATED_AT]: 'property.createdAt',
+        [PropertySortField.UPDATED_AT]: 'property.updatedAt',
+      };
+      const expression = columns[field];
+      if (!expression) throw new BadRequestException('Unsupported property sort field');
+      order.push({
+        expression,
+        direction: sqlDirection,
+        type: field === PropertySortField.NAME ? 'text' : 'timestamptz',
+      });
+    }
+
+    order.push({
+      expression: 'property.code',
+      direction: field === PropertySortField.RELEVANCE ? 'ASC' : sqlDirection,
+      type: 'text',
+    });
     const page = await this.pagination.read(
-      repository.createQueryBuilder('property'),
+      query,
       { limit, nextToken },
       {
         scope: 'product.property.list',
-        filters: {},
-        order: [{ expression: 'property.code', direction: 'ASC', type: 'text' }],
+        filters: { search: term, sortBy: field, sortDirection: direction },
+        order,
       },
     );
     if (page.items.length === 0) return page;
@@ -39,7 +86,8 @@ export class PropertyRepository {
       relations: { unit: true, options: { extras: true } },
       order: { code: 'ASC', options: { sortOrder: 'ASC', code: 'ASC', extras: { sortOrder: 'ASC', type: 'ASC' } } },
     });
-    return { items, meta: page.meta };
+    const byCode = new Map(items.map((property) => [property.code, property]));
+    return { items: page.items.map((property) => byCode.get(property.code)!), meta: page.meta };
   }
 
   getByCode(code: string): Promise<PropertyModel> {

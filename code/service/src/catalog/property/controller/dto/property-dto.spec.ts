@@ -2,10 +2,25 @@ import 'reflect-metadata';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 
 import { CreatePropertyDto } from './create-property.dto';
+import { GetAllPropertiesDto } from './get-all-properties.dto';
 import { UpdatePropertyOptionDto } from './update-property-option.dto';
 
 describe('Property DTO', () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true });
+
+  it('accepts and normalizes a property search query', async () => {
+    const dto = await pipe.transform(
+      { search: ' материал ', limit: 20 },
+      { type: 'body', metatype: GetAllPropertiesDto },
+    );
+    expect(dto.search).toBe('материал');
+  });
+
+  it.each([123, ['материал'], 'а'.repeat(257)])('rejects invalid property search: %j', async (search) => {
+    await expect(pipe.transform({ search }, { type: 'body', metatype: GetAllPropertiesDto })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
 
   it('transforms a nested OPTIONS definition without changing business codes', async () => {
     const dto = await pipe.transform(

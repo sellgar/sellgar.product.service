@@ -3,6 +3,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -16,6 +17,7 @@ import { PropertyKind } from './property-kind.enum';
 import { PropertyOptionModel } from './property-option.model';
 
 @Entity('property')
+@Index('property_search_vector_idx', { synchronize: false })
 @Check('property_version_positive', 'version > 0')
 @Unique('property_code_kind_unique', ['code', 'kind'])
 export class PropertyModel {
@@ -27,6 +29,9 @@ export class PropertyModel {
 
   @Column({ type: 'text', nullable: true })
   description: string | null;
+
+  @Column({ name: 'search_vector', type: 'tsvector', select: false, insert: false, update: false })
+  searchVector?: string;
 
   @Column({ type: 'enum', enum: PropertyKind, enumName: 'property_kind_enum' })
   kind: PropertyKind;
