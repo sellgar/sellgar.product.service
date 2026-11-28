@@ -7,6 +7,7 @@ import { DataSource, QueryRunner } from 'typeorm';
 import { ProductOutboxService } from '../../../integration/outbox/product-outbox.service';
 import { AddProductFullTextSearch1792022400000 } from '../../../database/migrations/AddProductFullTextSearch1792022400000';
 import { AddPropertyFullTextSearch1795813200000 } from '../../../database/migrations/AddPropertyFullTextSearch1795813200000';
+import { NormalizePropertySearch1795861800000 } from '../../../database/migrations/NormalizePropertySearch1795861800000';
 import { ImageModel } from '../../image/infrastructure/persistence/model/image.model';
 import { UnitModel } from '../../unit/unit.model';
 import { PropertyModel } from '../property.model';
@@ -48,7 +49,7 @@ describeDatabase('Property pagination on PostgreSQL', () => {
       uuid uuid PRIMARY KEY, file_name text, version integer DEFAULT 1
     )`);
     await runner.query(`CREATE TABLE property (
-      code varchar(256) PRIMARY KEY, name varchar(256), description text, kind text,
+      code varchar(256) COLLATE "C" PRIMARY KEY, name varchar(256) COLLATE "C", description text COLLATE "C", kind text,
       unit_code varchar(256), version integer DEFAULT 1,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
@@ -70,6 +71,7 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     )`);
     await new AddProductFullTextSearch1792022400000().up(runner);
     await new AddPropertyFullTextSearch1795813200000().up(runner);
+    await new NormalizePropertySearch1795861800000().up(runner);
     await runner.query(`INSERT INTO property(code, name, kind)
       SELECT 'property-' || lpad(n::text, 2, '0'), 'Свойство ' || n, 'TEXT'
       FROM generate_series(0, 58) AS n`);
@@ -131,6 +133,10 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     await addProperty('details', 'Дополнительные сведения', 'Материал изделия');
 
     expect((await repository.getAll(20, undefined, 'матер')).items.map((item) => item.code)).toEqual([
+      'lining',
+      'details',
+    ]);
+    expect((await repository.getAll(20, undefined, 'МАТЕР')).items.map((item) => item.code)).toEqual([
       'lining',
       'details',
     ]);
@@ -214,8 +220,8 @@ describeDatabase('Property pagination on PostgreSQL', () => {
     await runner.query('ANALYZE property');
     const plan = await runner.query(
       `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-      SELECT code FROM property WHERE search_vector @@ product_search_query($1)
-      ORDER BY ts_rank_cd(search_vector, product_search_query($1), 32) DESC, code LIMIT 20`,
+      SELECT code FROM property WHERE search_vector @@ property_search_query($1)
+      ORDER BY ts_rank_cd(search_vector, property_search_query($1), 32) DESC, code LIMIT 20`,
       ['матер'],
     );
 

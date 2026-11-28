@@ -41,13 +41,13 @@ export class PropertyRepository {
     const sqlDirection = direction === PropertySortDirection.DESC ? 'DESC' : 'ASC';
 
     if (term) {
-      query.andWhere('property.search_vector @@ product_search_query(:search)', { search: term });
+      query.andWhere('property.search_vector @@ property_search_query(:search)', { search: term });
     }
 
     if (field === PropertySortField.RELEVANCE) {
       if (!term) throw new BadRequestException('Relevance sorting requires search');
       order.push({
-        expression: 'ts_rank_cd(property.search_vector, product_search_query(:search), 32)',
+        expression: 'ts_rank_cd(property.search_vector, property_search_query(:search), 32)',
         direction: sqlDirection,
         type: 'real',
       });
